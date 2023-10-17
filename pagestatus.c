@@ -31,7 +31,7 @@ int kpage_fd;
 void init() 
 {
 	char pagemap_file[BUFSIZ];
-	snprintf(pagemap_file, sizeof(pagemap_file), "/proc/%ju/pagemap", (uintmax_t)getpid());
+		snprintf(pagemap_file, sizeof(pagemap_file), "/proc/%ju/pagemap", (uintmax_t)getpid());
     	assert((pagemap_fd = open(pagemap_file, O_RDONLY)) > 0);
 	assert((kpage_fd = open("/proc/kpageflags", O_RDONLY)) > 0);
 }
@@ -63,8 +63,7 @@ PagedetailsEntry* get_page_details(uintptr_t vaddr)
 	// 55 bits is pfn
 	// if pfn is 0, we have a problem somewhere
 	entry->pfn = data & (((uint64_t)1 << 55) - 1);
-	assert(entry->pfn); 
-
+	// assert(entry->pfn); 
 	// 61 is file_page
 	entry->is_file_page = (data >> 61) & 1;
 
@@ -126,22 +125,27 @@ int main(int argc, char **argv)
 		printf("Error opening file %s. Make sure it exists.\n", argv[1]);
 		exit(-1);
 	}
-
+	
+	printf("Sysconf page size: %lu\n", (unsigned long)PGSIZE);
 	// MAP_POPULATE is necessary; otherwise, Linux delays creating the PT entries and thus pfns will be 0...
-	vaddr = (uintptr_t) mmap(NULL, NUMPAGES * PGSIZE, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE, fd, 0);
-
+	// vaddr = (uintptr_t) mmap(NULL, NUMPAGES * PGSIZE, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE, fd, 0);
+	vaddr = (uintptr_t) mmap(NULL, NUMPAGES * PGSIZE, PROT_WRITE | PROT_READ, MAP_SHARED | MAP_POPULATE | MAP_NONBLOCK, fd, 0);
 	// overwrite some portions of the file, optionally fsync the file
 	Args args;
 	args.filename = argv[1]; 
 	args.fsync = strtol(argv[3], &dummy, 10);
-	overwrite_file(&args);
+	// overwrite_file(&args);
 
 	init();
 	gettimeofday(&start,NULL);
+	
 	for(i = 0; i < NUMPAGES; i++) {
 	    PagedetailsEntry* entry = get_page_details(vaddr + i * PGSIZE);
-	    printf("vpn:%lu, pfn:%lu, is_file_page:%d, is_dirty:%d\n", entry->vpn, entry->pfn, entry->is_file_page, entry->is_dirty);
+	    if (entry->pfn || !entry->pfn) {
+		    printf("vpn:%lu, pfn:%lu, is_file_page:%d, is_dirty:%d\n", entry->vpn, entry->pfn, entry->is_file_page, entry->is_dirty);
+	    }
 	}
+	
 	gettimeofday(&end,NULL);
 	int elapsed = ((end.tv_sec - start.tv_sec) * 1000000) + (end.tv_usec - start.tv_usec);
 	teardown();
